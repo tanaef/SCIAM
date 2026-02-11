@@ -1,0 +1,14 @@
+name = "docusign-workers"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# 環境変数（シークレット）
+# デプロイ前に以下のコマンドで設定してください：
+# wrangler secret put DOCUSIGN_INTEGRATION_KEY
+# wrangler secret put DOCUSIGN_USER_ID
+# wrangler secret put DOCUSIGN_ACCOUNT_ID
+# wrangler secret put DOCUSIGN_PRIVATE_KEY
+
+[vars]
+DOCUSIGN_BASE_PATH = "https://demo.docusign.net/restapi"

@@ -1,0 +1,23 @@
+{
+  "name": "docusign-workers",
+  "version": "1.0.0",
+  "description": "DocuSign API integration with Cloudflare Workers",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["docusign", "cloudflare-workers", "api"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260210.0",
+    "@types/node": "^25.2.3",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.64.0"
+  },
+  "dependencies": {
+    "docusign-esign": "^8.6.0"
+  }
+}
