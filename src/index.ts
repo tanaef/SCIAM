@@ -266,7 +266,7 @@ function getHTMLPage(): string {
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0070d2 0%, #003e7e 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -306,7 +306,7 @@ function getHTMLPage(): string {
             box-shadow: 0 15px 40px rgba(0,0,0,0.3);
         }
         .card h2 {
-            color: #667eea;
+            color: #0070d2;
             margin-bottom: 20px;
             font-size: 1.5rem;
             display: flex;
@@ -337,23 +337,24 @@ function getHTMLPage(): string {
         input[type="text"]:focus,
         input[type="email"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #0070d2;
         }
         button {
             width: 100%;
             padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0070d2;
             color: white;
             border: none;
             border-radius: 8px;
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
         }
         button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 5px 15px rgba(0, 112, 210, 0.4);
+            background: #005fb2;
         }
         button:active {
             transform: translateY(0);
@@ -394,10 +395,10 @@ function getHTMLPage(): string {
             background: #f8f9fa;
             border-radius: 8px;
             margin-bottom: 10px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #0070d2;
         }
         .envelope-item strong {
-            color: #667eea;
+            color: #0070d2;
         }
         .envelope-item .status {
             display: inline-block;
@@ -443,7 +444,7 @@ function getHTMLPage(): string {
             margin-bottom: 30px;
         }
         .info-box h3 {
-            color: #667eea;
+            color: #0070d2;
             margin-bottom: 15px;
         }
         .info-box ul {
@@ -456,7 +457,7 @@ function getHTMLPage(): string {
         }
         .info-box li:before {
             content: "✓ ";
-            color: #667eea;
+            color: #0070d2;
             font-weight: bold;
             margin-right: 8px;
         }
@@ -473,8 +474,8 @@ function getHTMLPage(): string {
 <body>
     <div class="container">
         <header>
-            <h1>📄 DocuSign API - Cloudflare Workers</h1>
-            <p class="subtitle">Envelopeの作成・管理を簡単に</p>
+            <h1>📄 SCIAM API 検証App</h1>
+            <p class="subtitle">DocuSign Envelope管理システム</p>
         </header>
 
         <div class="info-box">
@@ -535,6 +536,21 @@ function getHTMLPage(): string {
                     <span class="btn-text">リストを取得</span>
                 </button>
                 <div id="listResult" class="result"></div>
+            </div>
+
+            <div class="card">
+                <h2><span class="icon">📥</span> Envelope文書ダウンロード</h2>
+                <form id="downloadEnvelopeDocsForm">
+                    <div class="form-group">
+                        <label for="downloadEnvelopeId">Envelope ID</label>
+                        <input type="text" id="downloadEnvelopeId" name="envelope_id" required 
+                               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                    </div>
+                    <button type="submit" id="downloadBtn">
+                        <span class="btn-text">文書をダウンロード</span>
+                    </button>
+                </form>
+                <div id="downloadResult" class="result"></div>
             </div>
         </div>
 
@@ -708,6 +724,48 @@ function getHTMLPage(): string {
             } finally {
                 btn.disabled = false;
                 btnText.textContent = 'リストを取得';
+                resultDiv.style.display = 'block';
+            }
+        });
+
+        // Envelope文書ダウンロード
+        document.getElementById('downloadEnvelopeDocsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('downloadBtn');
+            const btnText = btn.querySelector('.btn-text');
+            const resultDiv = document.getElementById('downloadResult');
+            
+            btn.disabled = true;
+            btnText.innerHTML = '<span class="loading"></span> ダウンロード中...';
+            resultDiv.style.display = 'none';
+            
+            const envelopeId = document.getElementById('downloadEnvelopeId').value;
+            
+            try {
+                const response = await fetch(\`/api/envelope-documents/\${envelopeId}\`);
+                
+                if (!response.ok) {
+                    throw new Error('文書のダウンロードに失敗しました');
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = \`envelope_\${envelopeId}_documents.pdf\`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = '<strong>✅ 成功!</strong><br>文書をダウンロードしました';
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = \`<strong>❌ エラー:</strong> \${error.message}\`;
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = '文書をダウンロード';
                 resultDiv.style.display = 'block';
             }
         });
@@ -1038,6 +1096,50 @@ export default {
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
           }
         );
+      }
+
+      // Envelope文書ダウンロードAPI
+      if (url.pathname.startsWith('/api/envelope-documents/') && request.method === 'GET') {
+        const envelopeId = url.pathname.split('/').pop();
+
+        if (!envelopeId) {
+          return new Response(
+            JSON.stringify({ error: 'Envelope IDが必要です' }),
+            {
+              status: 400,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders },
+            }
+          );
+        }
+
+        const accessToken = await getAccessToken(env);
+
+        // Envelopeの文書を結合してダウンロード
+        const response = await fetch(
+          `${env.DOCUSIGN_BASE_PATH}/v2.1/accounts/${env.DOCUSIGN_ACCOUNT_ID}/envelopes/${envelopeId}/documents/combined`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Accept': 'application/pdf',
+            },
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`DocuSign API error: ${response.status} ${errorText}`);
+        }
+
+        const documentData = await response.arrayBuffer();
+
+        return new Response(documentData, {
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="envelope_${envelopeId}_documents.pdf"`,
+            ...corsHeaders,
+          },
+        });
       }
 
       // Navigator API: 文書一覧取得
