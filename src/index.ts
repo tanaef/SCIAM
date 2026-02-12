@@ -597,6 +597,15 @@ function getHTMLPage(): string {
                 </button>
                 <div id="navigatorListResult" class="result"></div>
             </div>
+
+            <div class="card">
+                <h2><span class="icon">👥</span> ユーザー一覧</h2>
+                <p style="color: #666; margin-bottom: 20px;">DocuSign環境のユーザーを表示します</p>
+                <button id="usersListBtn">
+                    <span class="btn-text">ユーザーリストを取得</span>
+                </button>
+                <div id="usersListResult" class="result"></div>
+            </div>
         </div>
     </div>
 
@@ -850,6 +859,56 @@ function getHTMLPage(): string {
             } finally {
                 btn.disabled = false;
                 btnText.textContent = '文書リストを取得';
+                resultDiv.style.display = 'block';
+            }
+        });
+
+        // ユーザー一覧取得
+        document.getElementById('usersListBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('usersListBtn');
+            const btnText = btn.querySelector('.btn-text');
+            const resultDiv = document.getElementById('usersListResult');
+            
+            btn.disabled = true;
+            btnText.innerHTML = '<span class="loading"></span> 取得中...';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/users');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result info';
+                    
+                    if (data.users.length === 0) {
+                        resultDiv.innerHTML = '<strong>📭 ユーザーが見つかりませんでした</strong>';
+                    } else {
+                        let html = \`<strong>👥 ユーザーリスト (\${data.count}件)</strong>\`;
+                        html += '<div class="envelope-list">';
+                        
+                        data.users.forEach(user => {
+                            html += \`
+                                <div class="envelope-item">
+                                    <strong>名前:</strong> \${user.user_name || '(名前なし)'}<br>
+                                    <strong>メール:</strong> \${user.email}<br>
+                                    <strong>ステータス:</strong> \${user.user_status}<br>
+                                    <strong>作成日時:</strong> \${formatDate(user.created_date_time)}
+                                </div>
+                            \`;
+                        });
+                        
+                        html += '</div>';
+                        resultDiv.innerHTML = html;
+                    }
+                } else {
+                    throw new Error(data.error || '不明なエラー');
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = \`<strong>❌ エラー:</strong> \${error.message}\`;
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'ユーザーリストを取得';
                 resultDiv.style.display = 'block';
             }
         });
@@ -1176,6 +1235,51 @@ export default {
             success: true,
             envelopes,
             count: envelopes.length,
+          }),
+          {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          }
+        );
+      }
+
+      // ユーザー一覧取得API
+      if (url.pathname === '/api/users' && request.method === 'GET') {
+        const accessToken = await getAccessToken(env);
+
+        // DocuSign APIでユーザー一覧を取得
+        const response = await fetch(
+          `${env.DOCUSIGN_BASE_PATH}/v2.1/accounts/${env.DOCUSIGN_ACCOUNT_ID}/users`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`DocuSign API error: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json() as { users?: any[] };
+
+        const users = data.users?.map((user: any) => ({
+          user_id: user.userId,
+          user_name: user.userName,
+          email: user.email,
+          first_name: user.firstName,
+          last_name: user.lastName,
+          user_status: user.userStatus,
+          created_date_time: user.createdDateTime,
+        })) || [];
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            users,
+            count: users.length,
           }),
           {
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
