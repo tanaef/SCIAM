@@ -507,6 +507,15 @@ function getHTMLPage(): string {
                         <input type="text" id="documentName" name="document_name" 
                                placeholder="契約書" value="Sample Document">
                     </div>
+                    <div class="form-group">
+                        <label for="envelopeDocument">署名対象の文書（オプション）</label>
+                        <input type="file" id="envelopeDocument" name="document" 
+                               accept=".pdf" 
+                               style="padding: 10px; border: 2px dashed #0070d2; border-radius: 8px; background: #f8f9fa;">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            ※ファイルを選択しない場合はサンプルPDFが使用されます
+                        </small>
+                    </div>
                     <button type="submit" id="createBtn">
                         <span class="btn-text">Envelopeを作成</span>
                     </button>
@@ -602,17 +611,35 @@ function getHTMLPage(): string {
             btnText.innerHTML = '<span class="loading"></span> 作成中...';
             resultDiv.style.display = 'none';
             
-            const formData = {
-                signer_email: document.getElementById('signerEmail').value,
-                signer_name: document.getElementById('signerName').value,
-                document_name: document.getElementById('documentName').value
-            };
+            const fileInput = document.getElementById('envelopeDocument');
+            const file = fileInput.files[0];
+            
+            let requestBody;
+            let headers = {};
+            
+            if (file) {
+                // ファイルがある場合はFormDataで送信
+                const formData = new FormData();
+                formData.append('signer_email', document.getElementById('signerEmail').value);
+                formData.append('signer_name', document.getElementById('signerName').value);
+                formData.append('document_name', document.getElementById('documentName').value);
+                formData.append('document', file);
+                requestBody = formData;
+            } else {
+                // ファイルがない場合はJSONで送信
+                requestBody = JSON.stringify({
+                    signer_email: document.getElementById('signerEmail').value,
+                    signer_name: document.getElementById('signerName').value,
+                    document_name: document.getElementById('documentName').value
+                });
+                headers = { 'Content-Type': 'application/json' };
+            }
             
             try {
                 const response = await fetch('/api/create-envelope', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
+                    headers: headers,
+                    body: requestBody
                 });
                 
                 const data = await response.json();
@@ -707,7 +734,11 @@ function getHTMLPage(): string {
                                     <strong>ID:</strong> \${env.envelope_id}
                                     <span class="status \${env.status}">\${env.status}</span><br>
                                     <strong>件名:</strong> \${env.email_subject || '(件名なし)'}<br>
-                                    <strong>作成日時:</strong> \${formatDate(env.created_date_time)}
+                                    <strong>作成日時:</strong> \${formatDate(env.created_date_time)}<br>
+                                    <button onclick="downloadEnvelopeDocuments('\${env.envelope_id}')" 
+                                            style="margin-top: 10px; padding: 8px 16px; background: #0070d2; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                        📥 文書をダウンロード
+                                    </button>
                                 </div>
                             \`;
                         });
@@ -879,6 +910,29 @@ function getHTMLPage(): string {
             }
         });
 
+        // Envelopeの文書をダウンロード
+        async function downloadEnvelopeDocuments(envelopeId) {
+            try {
+                const response = await fetch(\`/api/envelope-documents/\${envelopeId}\`);
+                
+                if (!response.ok) {
+                    throw new Error('文書のダウンロードに失敗しました');
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = \`envelope_\${envelopeId}_documents.pdf\`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                alert(\`ダウンロードエラー: \${error.message}\`);
+            }
+        }
+
         // 文書ダウンロード関数
         async function downloadDocument(documentId, documentName) {
             try {
@@ -944,13 +998,47 @@ export default {
 
       // Envelope作成API
       if (url.pathname === '/api/create-envelope' && request.method === 'POST') {
-        const body = await request.json() as {
-          signer_email: string;
-          signer_name: string;
-          document_name?: string;
-        };
+        const contentType = request.headers.get('content-type') || '';
+        let signerEmail: string;
+        let signerName: string;
+        let documentName: string;
+        let documentBase64: string;
 
-        if (!body.signer_email || !body.signer_name) {
+        if (contentType.includes('multipart/form-data')) {
+          // FormDataの場合（ファイルアップロードあり）
+          const formData = await request.formData();
+          signerEmail = formData.get('signer_email') as string;
+          signerName = formData.get('signer_name') as string;
+          documentName = formData.get('document_name') as string || 'Uploaded Document';
+          
+          const file = formData.get('document');
+          if (!file || typeof file === 'string') {
+            return new Response(
+              JSON.stringify({ error: 'ファイルが必要です' }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json', ...corsHeaders },
+              }
+            );
+          }
+          
+          const fileBuffer = await (file as File).arrayBuffer();
+          documentBase64 = Buffer.from(fileBuffer).toString('base64');
+        } else {
+          // JSONの場合（サンプルPDF使用）
+          const body = await request.json() as {
+            signer_email: string;
+            signer_name: string;
+            document_name?: string;
+          };
+          
+          signerEmail = body.signer_email;
+          signerName = body.signer_name;
+          documentName = body.document_name || 'Sample Document';
+          documentBase64 = createSamplePDF();
+        }
+
+        if (!signerEmail || !signerName) {
           return new Response(
             JSON.stringify({ error: '署名者のメールアドレスと名前が必要です' }),
             {
@@ -962,16 +1050,13 @@ export default {
 
         // アクセストークンを取得
         const accessToken = await getAccessToken(env);
-
-        // Envelope定義を作成
-        const documentBase64 = createSamplePDF();
         
         const envelopeDefinition = {
           emailSubject: '署名をお願いします - DocuSign App',
           documents: [
             {
               documentBase64,
-              name: body.document_name || 'Sample Document',
+              name: documentName,
               fileExtension: 'pdf',
               documentId: '1',
             },
@@ -979,8 +1064,8 @@ export default {
           recipients: {
             signers: [
               {
-                email: body.signer_email,
-                name: body.signer_name,
+                email: signerEmail,
+                name: signerName,
                 recipientId: '1',
                 routingOrder: '1',
                 tabs: {
